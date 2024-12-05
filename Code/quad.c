@@ -15,6 +15,16 @@ typedef struct Quadtree{
     int levels;
 }Quadtree;
 
+// Function to calculate the total number of nodes in the quadtree
+int calculateTreeSize(int levels) {
+    if (levels <= 0) {
+        return 0; // If no levels, there are no nodes
+    }
+    
+    // Calculate the number of nodes using the formula for the sum of the geometric series
+    return (pow(4, levels) - 1) / 3;
+}
+
 
 // Function to read a PGM file and return pixel data
 unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGray) {
@@ -32,23 +42,29 @@ unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGr
         return NULL;
     }
 
-    // Skip comments
+    // Skip whitespace and comments
     int c;
-    while ((c = fgetc(file)) == '#') {
+    while ((c = fgetc(file)) == ' ' || c == '\t' || c == '\n');
+    if (c == '#') {
+        // Skip comment line
         while (fgetc(file) != '\n');
+        // Skip any additional whitespace
+        while ((c = fgetc(file)) == ' ' || c == '\t' || c == '\n');
     }
+    // Unget the last character read
     ungetc(c, file);
 
-    // Read image dimensions and max gray level
-    fscanf(file, "%d %d %d", width, height, maxGray);
-    if (*width != *height || (*width & (*width - 1)) != 0) {
-        fprintf(stderr, "Error: Only square images of size 2^n x 2^n are supported.\n");
+    // Read width, height, and max gray value
+    if (fscanf(file, "%d %d %d", width, height, maxGray) != 3) {
+        fprintf(stderr, "Error: Failed to read width, height, or max gray value\n");
         fclose(file);
         return NULL;
     }
 
+    // Debug: Print the raw width, height, and max gray values
+    printf("Width: %d, Height: %d, Max Gray: %d\n", *width, *height, *maxGray);
+
     // Read pixel data
-    fgetc(file); 
     size_t dataSize = (*width) * (*height);
     unsigned char* data = (unsigned char*)malloc(dataSize);
     if (!data) {
@@ -57,9 +73,12 @@ unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGr
         return NULL;
     }
 
+    // Skip to the next line and any whitespace before pixel data
+    while ((c = fgetc(file)) == ' ' || c == '\t' || c == '\n');
+    ungetc(c, file);
+
     fread(data, 1, dataSize, file);
     fclose(file);
-
     return data;
 }
 
@@ -99,26 +118,100 @@ Quadtree* initializeQuadtree(int levels) {
     return tree;
 }
 
+// Function to combine 4 neighboring nodes or pixels into a single quadtree node
+void createPixel(Pixnode* parent, Pixnode* tl, Pixnode* tr, Pixnode* br, Pixnode* bl) {
+    int sum = tl->m + tr->m + br->m + bl->m;
+    parent->m = (unsigned char)(sum / 4); 
+    parent->e = sum%4; 
+    
+    // Check if all child nodes have the same pixel value
+    parent->u = ((tl->m == tr->m) && (tr->m == br->m) && (br->m == bl->m)) ? 1 : 0;
+}
 
-int main(int argc, char **argv){
-    if (argc!= 3) {
-        fprintf(stderr, "Usage: %s <input_pgm_file> <output_quadtree_file>\n", argv[0]);
-        return 1;
+// Recursive function to build the quadtree in ascending order (suffix traversal)
+void pixmapToQuadtree(unsigned char* pixmap, int width, Quadtree* tree, int nodeIndex, int x, int y, int size, int level) {
+    // If we reach the smallest level (leaf nodes)
+    if (size == 1) {
+        tree->Pixels[nodeIndex].m = pixmap[y * width + x];
+        tree->Pixels[nodeIndex].u = 1;  
+        tree->Pixels[nodeIndex].e = 0;
+        return;
     }
 
-    const char* inputFilename = argv[1];
-    const char* outputFilename = argv[2];
+    int halfSize = size / 2;
 
+    // Calculate indices for the 4 child blocks (clockwise order)
+    int tlIndex = 4 * nodeIndex + 1;  
+    int trIndex = tlIndex + 1;        
+    int brIndex = tlIndex + 2;        
+    int blIndex = tlIndex + 3;        
+
+    // Recursively process the four quadrants (top-left, top-right, bottom-right, bottom-left)
+    pixmapToQuadtree(pixmap, width, tree, tlIndex, x, y, halfSize, level + 1);                // Top-left
+    pixmapToQuadtree(pixmap, width, tree, trIndex, x + halfSize, y, halfSize, level + 1);      // Top-right
+    pixmapToQuadtree(pixmap, width, tree, brIndex, x + halfSize, y + halfSize, halfSize, level + 1);  // Bottom-right
+    pixmapToQuadtree(pixmap, width, tree, blIndex, x, y + halfSize, halfSize, level + 1);      // Bottom-left
+
+    // Combine the four quadrants into the parent node
+    createPixel(&tree->Pixels[nodeIndex], &tree->Pixels[tlIndex], &tree->Pixels[trIndex], &tree->Pixels[brIndex], &tree->Pixels[blIndex]);
+}
+
+// Wrapper function to encode the pixmap into the quadtree
+void encodePixmapToQuadtreeAscending(unsigned char* pixmap, int width, Quadtree* tree) {
+    if (!pixmap || !tree) {
+        printf("Error: Invalid inputs to encodePixmapToQuadtree.\n");
+        return;
+    }
+
+    int size = width;  // Assuming square images (2^n x 2^n)
+    pixmapToQuadtree(pixmap, width, tree, 0, 0, 0, size, 0);  // Start from the root node (level 0)
+}
+
+void printQuadtree(Quadtree* tree, int nodeIndex, int level) {
+    Pixnode* node = &tree->Pixels[nodeIndex];
+    printf("Level %d: Node %d -> m: %d, e: %d, u: %d\n", level, nodeIndex, node->m, node->e, node->u);
+
+    // If the node is non-uniform, recurse into the four child nodes
+    if (node->e == 1) {
+        int childIndex = 4 * nodeIndex + 1;
+        printQuadtree(tree, childIndex, level + 1);
+        printQuadtree(tree, childIndex + 1, level + 1);
+        printQuadtree(tree, childIndex + 2, level + 1);
+        printQuadtree(tree, childIndex + 3, level + 1);
+    }
+}
+
+
+int main(int argc, char **argv) {
+    // Step 1: Read the PGM image
     int width, height, maxGray;
-    unsigned char* pixmap = readPGM(inputFilename, &width, &height, &maxGray);
+    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/TEST4x4.pgm", &width, &height, &maxGray);
     if (!pixmap) {
-        return 1;
+        return -1; // Handle error if image is not read
     }
 
-    int levels = log2(width) + 1;
+    // Step 2: Calculate the number of levels for the quadtree (log2 of the width)
+    // We assume the width and height of the image are equal and powers of 2 (e.g., 4x4, 8x8)
+    int levels = log2(width) + 1;  // For a 4x4 image, levels would be 3
 
-    // TODO: Implement Quadtree compression and write to output file
+    // Step 3: Initialize the quadtree
+    Quadtree* tree = initializeQuadtree(levels);
+    if (!tree) {
+        free(pixmap);
+        return -1; // Handle error if quadtree cannot be initialized
+    }
 
+    // Step 4: Encode the image into the quadtree
+    encodePixmapToQuadtreeAscending(pixmap, width, tree);
+
+    // Step 5: Print the quadtree structure to verify it
+    printf("Quadtree Structure:\n");
+    printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
+
+    // Step 6: Cleanup
     free(pixmap);
+    free(tree->Pixels);
+    free(tree);
+
     return 0;
 }
