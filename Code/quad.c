@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 typedef struct Pixnode{
     unsigned char m;
@@ -24,7 +25,6 @@ int calculateTreeSize(int levels) {
     // Calculate the number of nodes using the formula for the sum of the geometric series
     return (pow(4, levels) - 1) / 3;
 }
-
 
 // Function to read a PGM file and return pixel data
 unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGray) {
@@ -182,6 +182,55 @@ void printQuadtree(Quadtree* tree, int nodeIndex, int level) {
 }
 
 
+// Function to get the current date and time in a string format
+void get_current_datetime(char* buffer, size_t buffer_size) {
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    snprintf(buffer, buffer_size, "%d-%02d-%02d %02d:%02d:%02d",
+        tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+        tm.tm_hour, tm.tm_min, tm.tm_sec);
+}
+
+// Function to write the quadtree to a .qtc file
+void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identification_code, int width, int height, int levels) {
+    FILE* file = fopen(filename, "wb");
+    if (!file) {
+        perror("Error opening file for writing");
+        return;
+    }
+
+    // Step 1: Write the identification code (e.g., Q1)
+    fwrite(identification_code, sizeof(char), 2, file);
+
+    // Step 4: Write the metadata as comments
+    fprintf(file, "\n# Metadata: Date and Time of Creation\n");
+    char datetime[20];
+    get_current_datetime(datetime, sizeof(datetime));
+    fprintf(file, "# Created on: %s\n", datetime);
+    fprintf(file, "# Compression Rate: <compression_rate_here>\n");
+    fprintf(file, "# This file contains quadtree data for an image.\n");
+
+    // Step 2: Write the image size (width, height, number of levels)
+    fwrite(&width, sizeof(int), 1, file);
+    fwrite(&height, sizeof(int), 1, file);
+    fwrite(&levels, sizeof(int), 1, file);
+
+
+    // Step 3: Write the quadtree data (nodes of the quadtree)
+    for (int i = 0; i < tree->treesize; i++) {
+        Pixnode* node = &tree->Pixels[i];
+        unsigned char e = node->e;
+        unsigned char u = node->u;
+
+        fwrite(&node->m, sizeof(unsigned char), 1, file);  // Write the average pixel value
+        fwrite(&e, sizeof(unsigned char), 1, file);        // Write the error flag
+        fwrite(&u, sizeof(unsigned char), 1, file);        // Write the uniformity flag
+    }
+
+    fclose(file);
+}
+
+
 int main(int argc, char **argv) {
     // Step 1: Read the PGM image
     int width, height, maxGray;
@@ -207,6 +256,7 @@ int main(int argc, char **argv) {
     // Step 5: Print the quadtree structure to verify it
     printf("Quadtree Structure:\n");
     printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
+    writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
 
     // Step 6: Cleanup
     free(pixmap);
