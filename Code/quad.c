@@ -1,30 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <time.h>
-
-typedef struct Pixnode{
-    unsigned char m;
-    unsigned char e : 2;
-    unsigned char u : 1;
-}Pixnode;
-
-typedef struct Quadtree{
-    Pixnode* Pixels;
-    int treesize;
-    int levels;
-}Quadtree;
+#include "quad.h"
 
 // Function to calculate the total number of nodes in the quadtree
 int calculateTreeSize(int levels) {
     if (levels <= 0) {
-        return 0; // If no levels, there are no nodes
+        return 0; // Si no hay niveles, no hay nodos
     }
-    
-    // Calculate the number of nodes using the formula for the sum of the geometric series
     return (pow(4, levels) - 1) / 3;
 }
+
 
 // Function to read a PGM file and return pixel data
 unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGray) {
@@ -228,40 +211,4 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
     }
 
     fclose(file);
-}
-
-
-int main(int argc, char **argv) {
-    // Step 1: Read the PGM image
-    int width, height, maxGray;
-    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/TEST4x4.pgm", &width, &height, &maxGray);
-    if (!pixmap) {
-        return -1; // Handle error if image is not read
-    }
-
-    // Step 2: Calculate the number of levels for the quadtree (log2 of the width)
-    // We assume the width and height of the image are equal and powers of 2 (e.g., 4x4, 8x8)
-    int levels = log2(width) + 1;  // For a 4x4 image, levels would be 3
-
-    // Step 3: Initialize the quadtree
-    Quadtree* tree = initializeQuadtree(levels);
-    if (!tree) {
-        free(pixmap);
-        return -1; // Handle error if quadtree cannot be initialized
-    }
-
-    // Step 4: Encode the image into the quadtree
-    encodePixmapToQuadtreeAscending(pixmap, width, tree);
-
-    // Step 5: Print the quadtree structure to verify it
-    printf("Quadtree Structure:\n");
-    printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
-    writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
-
-    // Step 6: Cleanup
-    free(pixmap);
-    free(tree->Pixels);
-    free(tree);
-
-    return 0;
 }
