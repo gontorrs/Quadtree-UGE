@@ -1,20 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <time.h>
-
-typedef struct Pixnode{
-    unsigned char m;
-    unsigned char e : 2;
-    unsigned char u : 1;
-}Pixnode;
-
-typedef struct Quadtree{
-    Pixnode* Pixels;
-    int treesize;
-    int levels;
-}Quadtree;
+#include "quad.h"
 
 
 double calculateCompressionRate(int originalSize, int compressedSize) {
@@ -27,12 +11,11 @@ double calculateCompressionRate(int originalSize, int compressedSize) {
 // Function to calculate the total number of nodes in the quadtree
 int calculateTreeSize(int levels) {
     if (levels <= 0) {
-        return 0; // If no levels, there are no nodes
+        return 0; // Si no hay niveles, no hay nodos
     }
-    
-    // Calculate the number of nodes using the formula for the sum of the geometric series
     return (pow(4, levels) - 1) / 3;
 }
+
 
 // Function to read a PGM file and return pixel data
 unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGray) {

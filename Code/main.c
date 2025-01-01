@@ -1,77 +1,126 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include "quad.h"
+#include "decode.h"
 #include <stdbool.h>
 
-void parameters(int argc, char *argv[])
-{
-    bool encode = false;
-    bool decode = false;
-    bool input = false;
-    bool out = false;
-    bool grid = false;
-    bool help = false;
-    bool verbose = false;
-    char *outputfile;
+void parameters(int argc, char *argv[], bool *encode, bool *decode, char **inputFile, char **outputFile, bool *grid, bool *help, bool *verbose) {
+    *encode = false;
+    *decode = false;
+    *grid = false;
+    *help = false;
+    *verbose = false;
+    *inputFile = NULL;
+    *outputFile = NULL;
 
-    for (int i = 1; i < argc; i++)
-    {
-        if (argv[i][0] == '-')
-        {
-            for (int j = 1; argv[i][j] != '\0'; j++)
-            {
-                switch (argv[i][j])
-                {
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            switch (argv[i][1]) {
                 case 'c':
-                    encode = true;
+                    *encode = true;
                     break;
                 case 'u':
-                    decode = true;
+                    *decode = true;
                     break;
                 case 'i':
-                    input = true;
+                    if (i + 1 < argc) {
+                        *inputFile = argv[++i];
+                    } else {
+                        fprintf(stderr, "Error: Missing input file after -i\n");
+                        exit(EXIT_FAILURE);
+                    }
                     break;
                 case 'o':
-                    out = true;
-                    outputfile = malloc(strlen(argv[i + 1]) + 1);
-                    strcpy(outputfile, argv[i + 1]);
-                    i++;
+                    if (i + 1 < argc) {
+                        *outputFile = argv[++i];
+                    } else {
+                        fprintf(stderr, "Error: Missing output file after -o\n");
+                        exit(EXIT_FAILURE);
+                    }
                     break;
-
                 case 'g':
-                    grid = true;
+                    *grid = true;
                     break;
                 case 'h':
-                    help = true;
+                    *help = true;
                     break;
                 case 'v':
-                    verbose = true;
+                    *verbose = true;
                     break;
                 default:
-                    break;
-                }
+                    fprintf(stderr, "Error: Unknown option -%c\n", argv[i][1]);
+                    exit(EXIT_FAILURE);
             }
+        } else {
+            fprintf(stderr, "Error: Invalid argument format: %s\n", argv[i]);
+            exit(EXIT_FAILURE);
         }
     }
-    if (outputfile != NULL) {
-        FILE *file = fopen(outputfile, "w");
 
-        if (file == NULL) {
-            printf("Error: Could not open the output file for writing\n");
-            free(outputfile);
-            return;
-        }
-        fclose(file);
-        free(outputfile);
-    } else {
-        printf("No output file specified.\n");
+    if (!*inputFile) {
+        fprintf(stderr, "Error: Input file not specified\n");
+        exit(EXIT_FAILURE);
     }
-    
+
+    if (!*outputFile) {
+        *outputFile = *encode ? "out.qtc" : "out.pgm";
+    }
 }
 
-int main(int argc, char *argv[])
-{
-    parameters(argc, argv);
+int main(int argc, char *argv[]) {
+    bool encode, decodeVar, grid, help, verbose;
+    char *inputFile, *outputFile;
 
-    return 0;
+    // Analizar parámetros
+    parameters(argc, argv, &encode, &decodeVar, &inputFile, &outputFile, &grid, &help, &verbose);
+
+    if (help) {
+        printf("Usage: codec [options]\n");
+        printf("  -c          Encode an input PGM file to QTC\n");
+        printf("  -u          Decode an input QTC file to PGM\n");
+        printf("  -i <file>   Specify input file\n");
+        printf("  -o <file>   Specify output file\n");
+        printf("  -g          Generate grid visualization (optional)\n");
+        printf("  -h          Show this help message\n");
+        printf("  -v          Verbose mode\n");
+        return 0;
+    }
+
+    if (encode && decodeVar) {
+        fprintf(stderr, "Error: Cannot encode and decode simultaneously\n");
+        return EXIT_FAILURE;
+    }
+
+    if (encode) {
+        if (verbose) printf("Encoding %s to %s\n", inputFile, outputFile);
+        // Lógica del codificador
+        int width, height, maxGray;
+        unsigned char *pixmap = readPGM(inputFile, &width, &height, &maxGray);
+        if (!pixmap) {
+            fprintf(stderr, "Error reading PGM file\n");
+            return EXIT_FAILURE;
+        }
+
+        int levels = log2(width) + 1;
+        Quadtree *tree = initializeQuadtree(levels);
+        if (!tree) {
+            free(pixmap);
+            fprintf(stderr, "Error initializing Quadtree\n");
+            return EXIT_FAILURE;
+        }
+
+        encodePixmapToQuadtreeAscending(pixmap, width, tree);
+        writeQuadtreeToQTC(outputFile, tree, "Q1", width, height, levels);
+
+        free(tree->Pixels);
+        free(tree);
+        free(pixmap);
+    } else if (decode) {
+        if (verbose) printf("Decoding %s to %s\n", inputFile, outputFile);
+        // Lógica del decodificador
+        decode(inputFile, outputFile);
+    } else {
+        fprintf(stderr, "Error: No operation specified. Use -c to encode or -u to decode\n");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
