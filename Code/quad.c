@@ -16,6 +16,14 @@ typedef struct Quadtree{
     int levels;
 }Quadtree;
 
+
+double calculateCompressionRate(int originalSize, int compressedSize) {
+    if (originalSize == 0) {
+        return 0.0; // Avoid division by zero
+    }
+    return (double)compressedSize / originalSize;
+}
+
 // Function to calculate the total number of nodes in the quadtree
 int calculateTreeSize(int levels) {
     if (levels <= 0) {
@@ -200,35 +208,41 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
     }
 
     // Step 1: Write the identification code (e.g., Q1)
-    fwrite(identification_code, sizeof(char), 2, file);
+    fwrite(identification_code, sizeof(char), strlen(identification_code), file);
+    fwrite("\n", sizeof(char), 1, file);
 
-    // Step 4: Write the metadata as comments
-    fprintf(file, "\n# Metadata: Date and Time of Creation\n");
-    char datetime[20];
-    get_current_datetime(datetime, sizeof(datetime));
-    fprintf(file, "# Created on: %s\n", datetime);
-    fprintf(file, "# Compression Rate: <compression_rate_here>\n");
-    fprintf(file, "# This file contains quadtree data for an image.\n");
+    // Step 2: Write metadata
+    time_t now = time(NULL);
+    char datetime[30];
+    strftime(datetime, sizeof(datetime), "# %a %b %d %H:%M:%S %Y\n", localtime(&now));
+    fwrite(datetime, sizeof(char), strlen(datetime), file);
 
-    // Step 2: Write the image size (width, height, number of levels)
-    fwrite(&width, sizeof(int), 1, file);
-    fwrite(&height, sizeof(int), 1, file);
-    fwrite(&levels, sizeof(int), 1, file);
+    // Calculate the compression rate
+    int originalSize = width * height; // Assuming 1 byte per pixel for the original image
+    int compressedSize = tree->treesize * 2; // Each node uses 2 bytes in the optimized format
+    double compressionRate = ((double)(compressedSize) / originalSize) * 100;
 
+    char compressionRateStr[50];
+    snprintf(compressionRateStr, sizeof(compressionRateStr), "# compression rate %.2f%%\n", compressionRate);
+    fwrite(compressionRateStr, sizeof(char), strlen(compressionRateStr), file);
 
-    // Step 3: Write the quadtree data (nodes of the quadtree)
+    // Step 3: Write the quadtree data
     for (int i = 0; i < tree->treesize; i++) {
         Pixnode* node = &tree->Pixels[i];
-        unsigned char e = node->e;
-        unsigned char u = node->u;
 
-        fwrite(&node->m, sizeof(unsigned char), 1, file);  // Write the average pixel value
-        fwrite(&e, sizeof(unsigned char), 1, file);        // Write the error flag
-        fwrite(&u, sizeof(unsigned char), 1, file);        // Write the uniformity flag
+        // Write `m` directly (1 byte)
+        fwrite(&node->m, sizeof(unsigned char), 1, file);
+
+        // Pack `e` and `u` into a single byte
+        unsigned char packed = (node->e & 0x3) | ((node->u & 0x1) << 2);
+        fwrite(&packed, sizeof(unsigned char), 1, file);
     }
 
     fclose(file);
 }
+
+
+
 
 
 int main(int argc, char **argv) {
