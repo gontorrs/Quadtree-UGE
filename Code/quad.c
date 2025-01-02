@@ -1,4 +1,5 @@
 #include "quad.h"
+#include "compress.h"
 
 
 double calculateCompressionRate(int originalSize, int compressedSize) {
@@ -190,7 +191,7 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
         return;
     }
 
-    // Step 1: Write the identification code (e.g., Q1)
+    // Step 1: Write header
     fwrite(identification_code, sizeof(char), strlen(identification_code), file);
     fwrite("\n", sizeof(char), 1, file);
 
@@ -200,30 +201,38 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
     strftime(datetime, sizeof(datetime), "# %a %b %d %H:%M:%S %Y\n", localtime(&now));
     fwrite(datetime, sizeof(char), strlen(datetime), file);
 
-    // Calculate the compression rate
-    int originalSize = width * height; // Assuming 1 byte per pixel for the original image
-    int compressedSize = tree->treesize * 2; // Each node uses 2 bytes in the optimized format
-    double compressionRate = ((double)(compressedSize) / originalSize) * 100;
+    // Step 3: Prepare data for compression
+    uchar* uncompressed = malloc(tree->treesize * 2); // 2 bytes per node (m + packed e,u)
+    uchar* compressed = malloc(tree->treesize * 3);    // Worst case compression buffer
+    
+    // Pack node data
+    for (int i = 0; i < tree->treesize; i++) {
+        Pixnode* node = &tree->Pixels[i];
+        uncompressed[i*2] = node->m;
+        uncompressed[i*2 + 1] = (node->e & 0x3) | ((node->u & 0x1) << 2);
+    }
 
+    // Step 4: Compress data
+    int compressedSize = encode(compressed, uncompressed, tree->treesize * 2);
+    int compressedBytes = (compressedSize + 7) / 8; // Convert bits to bytes (round up)
+
+    // Calculate compression rate
+    int originalSize = width * height;
+    double compressionRate = ((double)compressedBytes / originalSize) * 100;
+    
     char compressionRateStr[50];
     snprintf(compressionRateStr, sizeof(compressionRateStr), "# compression rate %.2f%%\n", compressionRate);
     fwrite(compressionRateStr, sizeof(char), strlen(compressionRateStr), file);
 
-    // Step 3: Write the quadtree data
-    for (int i = 0; i < tree->treesize; i++) {
-        Pixnode* node = &tree->Pixels[i];
+    // Step 5: Write compressed data size and data
+    fwrite(&compressedSize, sizeof(int), 1, file);    // Write number of bits
+    fwrite(compressed, sizeof(uchar), compressedBytes, file);
 
-        // Write `m` directly (1 byte)
-        fwrite(&node->m, sizeof(unsigned char), 1, file);
-
-        // Pack `e` and `u` into a single byte
-        unsigned char packed = (node->e & 0x3) | ((node->u & 0x1) << 2);
-        fwrite(&packed, sizeof(unsigned char), 1, file);
-    }
-
+    // Cleanup
+    free(uncompressed);
+    free(compressed);
     fclose(file);
 }
-
 
 
 
@@ -231,7 +240,7 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
 int main(int argc, char **argv) {
     // Step 1: Read the PGM image
     int width, height, maxGray;
-    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/TEST4x4.pgm", &width, &height, &maxGray);
+    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/eye.064.pgm", &width, &height, &maxGray);
     if (!pixmap) {
         return -1; // Handle error if image is not read
     }
@@ -253,7 +262,7 @@ int main(int argc, char **argv) {
     // Step 5: Print the quadtree structure to verify it
     printf("Quadtree Structure:\n");
     printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
-    writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
+    writeQuadtreeToQTC("eye.064.qtc", tree, "Q1", width, height, levels);
 
     // Step 6: Cleanup
     free(pixmap);

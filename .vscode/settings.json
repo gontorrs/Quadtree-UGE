@@ -2,6 +2,7 @@
     "files.associations": {
         "stdbool.h": "c",
         "decode.h": "c",
-        "quad.h": "c"
+        "quad.h": "c",
+        "limits.h": "c"
     }
 }
