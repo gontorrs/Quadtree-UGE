@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#define BASE_LAYER(tree) (((1 << (2 * ((tree)->levels - 1))) - 1) / 3)
 
 typedef struct Pixnode {
     unsigned char m;

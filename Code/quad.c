@@ -6,6 +6,7 @@ double calculateCompressionRate(int originalSize, int compressedSize) {
     if (originalSize == 0) {
         return 0.0; // Avoid division by zero
     }
+    printf("Compression Rate: %d / %d = %.2f%%\n",compressedSize,originalSize, (double)compressedSize / originalSize);
     return (double)compressedSize / originalSize;
 }
 
@@ -161,10 +162,16 @@ void encodePixmapToQuadtreeAscending(unsigned char* pixmap, int width, Quadtree*
 
 void printQuadtree(Quadtree* tree, int nodeIndex, int level) {
     Pixnode* node = &tree->Pixels[nodeIndex];
+
+    // Print tabulation based on the level
+    for (int i = 0; i < level; i++) {
+        printf("   ");
+    }
+
     printf("Level %d: Node %d -> m: %d, e: %d, u: %d\n", level, nodeIndex, node->m, node->e, node->u);
 
     // If the node is non-uniform, recurse into the four child nodes
-    if (node->e == 1) {
+    if (node->u == 0) {
         int childIndex = 4 * nodeIndex + 1;
         printQuadtree(tree, childIndex, level + 1);
         printQuadtree(tree, childIndex + 1, level + 1);
@@ -182,6 +189,88 @@ void get_current_datetime(char* buffer, size_t buffer_size) {
         tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
         tm.tm_hour, tm.tm_min, tm.tm_sec);
 }
+
+
+void packNodeData(Quadtree* tree, uchar* uncompressed) {
+    int bufferIndex = 0;
+    int baseLayerStartIndex = BASE_LAYER(tree);
+
+    // Local counters for m, e, and u writes
+    int mWrites = 0;
+    int eWrites = 0;
+    int uWrites = 0;
+
+    // Write the root node regardless of uniformity
+    uncompressed[bufferIndex++] = tree->Pixels[0].m;
+    mWrites++;
+
+    uncompressed[bufferIndex++] = tree->Pixels[0].e;
+    eWrites++;
+
+    if (tree->Pixels[0].e == 0) {
+        uncompressed[bufferIndex++] = tree->Pixels[0].u;
+        uWrites++;
+    }
+
+    // Skip writing children if the root node has uniformity equals to 1
+    if (tree->Pixels[0].u == 1) {
+        // printf("mWrites: %d, eWrites: %d, uWrites: %d\n", mWrites, eWrites, uWrites);
+        return; // No need to write any child nodes
+    }
+
+    for (int i = 1; i < tree->treesize; i++) {
+        Pixnode* node = &tree->Pixels[i];
+
+        // Skip the 4th node of each level
+        if ((i ) % 4 == 0) {
+            if (i < baseLayerStartIndex){
+                uncompressed[bufferIndex++] = node->e;
+                eWrites++;
+                uncompressed[bufferIndex++] = node->u;
+                uWrites++;
+            }
+            continue;
+        }
+
+        // Check if parent has uniformity equals to 1
+        int parentIndex = (i - 1) / 4; // Parent index in a quadtree
+        if (tree->Pixels[parentIndex].u == 1) {
+            continue; // Skip this node because its parent has uniformity = 1
+        }
+
+        // Write the node data into the buffer
+        uncompressed[bufferIndex++] = node->m;
+        mWrites++;
+
+        // At the base layer, skip writing node->e and node->u
+        if (i >= baseLayerStartIndex) {
+            continue;
+        }
+
+        // Write node->e even if it's zero
+        uncompressed[bufferIndex++] = node->e;
+        eWrites++;
+
+        // Write node->u even if it's zero
+        if(node->e == 0){
+            uncompressed[bufferIndex++] = node->u;
+            uWrites++;
+        }
+    }
+
+    // // Print the counters
+    // printf("mWrites: %d, eWrites: %d, uWrites: %d\n", mWrites, eWrites, uWrites);
+
+    // Print the content of the buffer
+    printf("Buffer content:\n");
+    for (int i = 0; i < bufferIndex; i++) {
+        printf("%d ", uncompressed[i]);
+    }
+    printf("\n");
+}
+
+
+
 
 // Function to write the quadtree to a .qtc file
 void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identification_code, int width, int height, int levels) {
@@ -202,23 +291,20 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
     fwrite(datetime, sizeof(char), strlen(datetime), file);
 
     // Step 3: Prepare data for compression
-    uchar* uncompressed = malloc(tree->treesize * 2); // 2 bytes per node (m + packed e,u)
+    uchar* uncompressed = malloc(tree->treesize * 3); // 3 bytes per node (m, e, u)
     uchar* compressed = malloc(tree->treesize * 3);    // Worst case compression buffer
     
     // Pack node data
-    for (int i = 0; i < tree->treesize; i++) {
-        Pixnode* node = &tree->Pixels[i];
-        uncompressed[i*2] = node->m;
-        uncompressed[i*2 + 1] = (node->e & 0x3) | ((node->u & 0x1) << 2);
-    }
+    packNodeData(tree, uncompressed);
 
     // Step 4: Compress data
-    int compressedSize = encode(compressed, uncompressed, tree->treesize * 2);
+    int compressedSize = encode(compressed, uncompressed, tree->treesize * 3);
     int compressedBytes = (compressedSize + 7) / 8; // Convert bits to bytes (round up)
 
     // Calculate compression rate
-    int originalSize = width * height;
-    double compressionRate = ((double)compressedBytes / originalSize) * 100;
+    int originalSize = width * height * 8;
+    int paddedCompressedSize = (compressedSize + 7) & ~7;
+    double compressionRate = calculateCompressionRate(originalSize, paddedCompressedSize);
     
     char compressionRateStr[50];
     snprintf(compressionRateStr, sizeof(compressionRateStr), "# compression rate %.2f%%\n", compressionRate);
@@ -240,7 +326,7 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
 int main(int argc, char **argv) {
     // Step 1: Read the PGM image
     int width, height, maxGray;
-    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/eye.064.pgm", &width, &height, &maxGray);
+    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/TEST4x4.pgm", &width, &height, &maxGray);
     if (!pixmap) {
         return -1; // Handle error if image is not read
     }
@@ -260,9 +346,9 @@ int main(int argc, char **argv) {
     encodePixmapToQuadtreeAscending(pixmap, width, tree);
 
     // Step 5: Print the quadtree structure to verify it
-    printf("Quadtree Structure:\n");
-    printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
-    writeQuadtreeToQTC("eye.064.qtc", tree, "Q1", width, height, levels);
+    //printf("Quadtree Structure:\n");
+    //printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
+    writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
 
     // Step 6: Cleanup
     free(pixmap);
