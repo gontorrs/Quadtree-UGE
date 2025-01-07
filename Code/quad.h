@@ -20,7 +20,6 @@ typedef struct Quadtree {
     int levels;
 } Quadtree;
 
-// Declaraciones de funciones
 int calculateTreeSize(int levels);
 unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGray);
 Quadtree* initializeQuadtree(int levels);

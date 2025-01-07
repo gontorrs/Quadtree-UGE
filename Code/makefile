@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-Wall -g
-OBJS=quad.o compress.o
+OBJS=quad.o compress.o decode.o
 
 all: quadtree
 
@@ -12,6 +12,9 @@ quad.o: quad.c quad.h compress.h
 
 compress.o: compress.c compress.h
 	$(CC) $(CFLAGS) -c compress.c
+
+decode.o: decode.c decode.h
+	$(CC) $(CFLAGS) -c decode.c
 
 clean:
 	rm -f *.o quadtree

@@ -1,5 +1,6 @@
 #include "quad.h"
 #include "compress.h"
+#include "decode.h"
 
 
 double calculateCompressionRate(int originalSize, int compressedSize) {
@@ -320,40 +321,37 @@ void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identi
     fclose(file);
 }
 
-
-
-
 int main(int argc, char **argv) {
-    // Step 1: Read the PGM image
-    int width, height, maxGray;
-    unsigned char* pixmap = readPGM("/home/mario/Documents/QuadTree/PGM/TEST4x4.pgm", &width, &height, &maxGray);
-    if (!pixmap) {
-        return -1; // Handle error if image is not read
-    }
+    // // Step 1: Read the PGM image
+    // int width, height, maxGray;
+    // unsigned char* pixmap = readPGM("../PGM/boat.512.pgm", &width, &height, &maxGray);
+    // if (!pixmap) {
+    //     return -1; // Handle error if image is not read
+    // }
 
-    // Step 2: Calculate the number of levels for the quadtree (log2 of the width)
-    // We assume the width and height of the image are equal and powers of 2 (e.g., 4x4, 8x8)
-    int levels = log2(width) + 1;  // For a 4x4 image, levels would be 3
+    // // Step 2: Calculate the number of levels for the quadtree (log2 of the width)
+    // // We assume the width and height of the image are equal and powers of 2 (e.g., 4x4, 8x8)
+    // int levels = log2(width) + 1;  // For a 4x4 image, levels would be 3
 
-    // Step 3: Initialize the quadtree
-    Quadtree* tree = initializeQuadtree(levels);
-    if (!tree) {
-        free(pixmap);
-        return -1; // Handle error if quadtree cannot be initialized
-    }
+    // // Step 3: Initialize the quadtree
+    // Quadtree* tree = initializeQuadtree(levels);
+    // if (!tree) {
+    //     free(pixmap);
+    //     return -1; // Handle error if quadtree cannot be initialized
+    // }
 
-    // Step 4: Encode the image into the quadtree
-    encodePixmapToQuadtreeAscending(pixmap, width, tree);
+    // // Step 4: Encode the image into the quadtree
+    // encodePixmapToQuadtreeAscending(pixmap, width, tree);
 
-    // Step 5: Print the quadtree structure to verify it
-    //printf("Quadtree Structure:\n");
-    //printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
-    writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
-
-    // Step 6: Cleanup
-    free(pixmap);
-    free(tree->Pixels);
-    free(tree);
-
+    // // Step 5: Print the quadtree structure to verify it
+    // //printf("Quadtree Structure:\n");
+    // //printQuadtree(tree, 0, 0); // Print the quadtree starting from the root (node index 0)
+    // writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
+    decodeQTCToPGM("../QTC.lossless/boat.512.qtc", "output.pgm");
+    // // Step 6: Cleanup
+    // free(pixmap);
+    // free(tree->Pixels);
+    // free(tree);
+    
     return 0;
 }

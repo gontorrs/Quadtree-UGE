@@ -1,3 +1,6 @@
+#ifndef COMPRESS_H
+#define COMPRESS_H
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -20,3 +23,4 @@ void case4(BitStream*);
 size_t pushbits(BitStream*, uchar, size_t);
 size_t pullbits(BitStream*, uchar*, size_t);
 int encode(uchar*, uchar*, int);
+#endif
