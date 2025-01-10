@@ -20,73 +20,8 @@ void check(BitStream* stream){
     }
 }
 
-void case1(BitStream* stream){
-  // writes a single byte of 0 to the stream
-    setbit(stream->ptr, stream->capa, 0);
-    stream->capa++;
-    check(stream);
-}
-
-void case2(BitStream* stream){
-  //writes 0b10 to the stream
-    setbit(stream->ptr, stream->capa, 1);
-    stream->capa++;
-    check(stream);
-    setbit(stream->ptr, stream->capa, 0);
-    stream->capa++;
-    check(stream);
-}
-
-void case3(BitStream* stream){
-  // writes 0b110 to the stream
-    setbit(stream->ptr, stream->capa, 1);
-    stream->capa++;
-    check(stream);
-    setbit(stream->ptr, stream->capa, 1);
-    stream->capa++;
-    check(stream);
-    setbit(stream->ptr, stream->capa, 0);
-    stream->capa++;
-    check(stream);
-}
-
-void case4(BitStream* stream){
-  // writes 0b111 to the stream
-    setbit(stream->ptr, stream->capa, 1);
-    stream->capa++;
-    check(stream);
-    setbit(stream->ptr, stream->capa, 1);
-    stream->capa++;
-    check(stream);
-    setbit(stream->ptr, stream->capa, 1);
-    stream->capa++;
-    check(stream);
-}
-
 size_t pushbits(BitStream* curr, uchar src, size_t nbit) {
     size_t nbitwritten = 0;
-
-    // Write header bits using case functions
-    if (src < 4) {
-        case1(curr);
-        nbit -= 1;
-        nbitwritten++;
-    } else if (src < 20) {
-        case2(curr);
-        src -= 4;
-        nbit -= 2;
-        nbitwritten += 2;
-    } else if (src < 52) {
-        case3(curr);
-        src -= 20;
-        nbit -= 3;
-        nbitwritten += 3;
-    } else {
-        case4(curr);
-        src -= 52;
-        nbit -= 3;
-        nbitwritten += 3;
-    }
 
     // Write remaining data bits
     size_t remaining_bits = nbit;
@@ -97,17 +32,14 @@ size_t pushbits(BitStream* curr, uchar src, size_t nbit) {
         }
 
         for (size_t i = 0; i < bits_to_write; i++) {
+            check(curr);
             int bit = (src >> (remaining_bits - 1 - i)) & 1;
             setbit(curr->ptr, curr->capa, bit);
             curr->capa++;
         }
 
         remaining_bits -= bits_to_write;
-
-        if (curr->capa == 8) {
-            curr->capa = 0;
-            curr->ptr++;
-        }
+        check(curr);
     }
 
     return nbitwritten + nbit;
@@ -144,14 +76,12 @@ int encode(uchar* dest, uchar* src, int N) {
         size_t nbits;
 
         // Determine the number of bits to write based on the value
-        if (value < 4) {
-            nbits = 3;  // 1 header bit + 2 data bits
-        } else if (value < 20) {
-            nbits = 6;  // 2 header bits + 4 data bits
-        } else if (value < 52) {
-            nbits = 8;  // 3 header bits + 5 data bits
+        if (value == 0 || value == 1){
+            nbits = 1;
+        } else if (value == 2 || value == 3){
+            nbits = 2;
         } else {
-            nbits = 11; // 3 header bits + 8 data bits
+            nbits = 8;
         }
 
         // Encode the value into the bitstream

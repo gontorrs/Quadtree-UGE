@@ -12,7 +12,10 @@
 	typedef unsigned char uchar;
 #endif
 
-typedef struct { uchar* ptr; size_t capa; } BitStream;
+typedef struct { 
+	uchar* ptr; 
+	size_t capa; 
+} BitStream;
 
 uchar getbit(uchar,size_t);
 void setbit(unsigned char*, size_t, int);
