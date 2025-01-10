@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
         free(tree->Pixels);
         free(tree);
         free(pixmap);
-    } else if (decode) {
+    } else if (decodeVar) {
         if (verbose) printf("Decoding %s to %s\n", inputFile, outputFile);
         // Lógica del decodificador
         decode(inputFile, outputFile);

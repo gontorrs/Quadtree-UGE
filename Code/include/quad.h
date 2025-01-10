@@ -8,6 +8,11 @@
 #include <time.h>
 #define BASE_LAYER(tree) (((1 << (2 * ((tree)->levels - 1))) - 1) / 3)
 
+typedef struct WriteLog {
+    char type;
+    int index;
+} WriteLog;
+
 typedef struct Pixnode {
     unsigned char m;
     unsigned char e : 2;
@@ -20,10 +25,13 @@ typedef struct Quadtree {
     int levels;
 } Quadtree;
 
-int calculateTreeSize(int levels);
-unsigned char* readPGM(const char* filename, int* width, int* height, int* maxGray);
+typedef unsigned char uchar;
+
+int calculateTreeSize(int);
+unsigned char* readPGM(const char*, int*, int*, int*);
 Quadtree* initializeQuadtree(int levels);
-void encodePixmapToQuadtreeAscending(unsigned char* pixmap, int width, Quadtree* tree);
-void writeQuadtreeToQTC(const char* filename, Quadtree* tree, const char* identification_code, int width, int height, int levels);
+void encodePixmapToQuadtreeAscending(unsigned char*, int, Quadtree*);
+void packNodeData(Quadtree*, uchar*, WriteLog*, int*);
+void writeQuadtreeToQTC(const char*, Quadtree*, const char*, int, int, int);
 
 #endif

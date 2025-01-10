@@ -1,20 +1,15 @@
 CC=gcc
-CFLAGS=-Wall -g
-OBJS=quad.o compress.o decode.o
+CFLAGS=-Wall -g -Iinclude
+SRCS=src/quad.c src/compress.c src/decode.c
+OBJS=$(SRCS:.c=.o)
 
 all: quadtree
 
 quadtree: $(OBJS)
 	$(CC) $(CFLAGS) -o quadtree $(OBJS) -lm
 
-quad.o: quad.c quad.h compress.h
-	$(CC) $(CFLAGS) -c quad.c
-
-compress.o: compress.c compress.h
-	$(CC) $(CFLAGS) -c compress.c
-
-decode.o: decode.c decode.h
-	$(CC) $(CFLAGS) -c decode.c
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o quadtree
+	rm -f src/*.o quadtree
