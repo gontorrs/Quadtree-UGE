@@ -7,7 +7,7 @@
 #include <string.h>
 #include "quad.h"
 
-
+typedef unsigned char uchar;
 
 typedef struct { 
 	uchar* ptr; 

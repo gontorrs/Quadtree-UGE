@@ -12,4 +12,4 @@ quadtree: $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f src/*.o quadtree
+	rm -f src/*.o quadtree *.qtc
