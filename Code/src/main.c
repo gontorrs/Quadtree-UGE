@@ -1,4 +1,5 @@
 #include "quad.h"
+#include "filter.h"
 typedef struct
 {
     bool encode;
@@ -122,44 +123,42 @@ int main(int argc, char **argv)
     }
     if (options.encode)
     {
-        // Encode process.
-        int width, height, maxGray;
-        unsigned char *pixmap = readPGM(options.inputFile, &width, &height, &maxGray, options.verbose);
+    // Encode process.
+    int width, height, maxGray;
+    unsigned char *pixmap = readPGM(options.inputFile, &width, &height, &maxGray, options.verbose);
+        // Lossless encoding.
+        if (!pixmap)
+        {
+            return -1;
+        }
+
+        int levels = log2(width) + 1;
+        Quadtree *encodeTree = initializeQuadtree(levels);
+        if (!encodeTree)
+        {
+            free(pixmap);
+            return -1;
+        }
+
+        encodePixmapToQuadtreeAscending(pixmap, width, encodeTree);
+        if (options.verbose)
+        {
+            printf("Tree size: %lld\n", encodeTree->treesize);
+            printf("Tree levels: %d\n", encodeTree->levels);
+            printQuadtree(encodeTree, 0, levels);
+        }
         if (options.alpha != 0.0)
         {
-            // Lossy encoding.
-            printf("Encoding with the lossy version: alpha = 0.0\n");
-            printf("At the moment the lossy version is not implemented\n");
+            double sigma = calculateSigmaStart(encodeTree);
+            filtrage(encodeTree,0,0, sigma, options.alpha);
+            printf("Encoding with the lossy version: alpha = %.1f\n", options.alpha);
         }
-        else
-        {
-            // Lossless encoding.
-            if (!pixmap)
-            {
-                return -1;
-            }
+        writeQuadtreeToQTC(options.outputFile, encodeTree, "Q1", width, height, levels, options.verbose);
 
-            int levels = log2(width) + 1;
-            Quadtree *encodeTree = initializeQuadtree(levels);
-            if (!encodeTree)
-            {
-                free(pixmap);
-                return -1;
-            }
-
-            encodePixmapToQuadtreeAscending(pixmap, width, encodeTree);
-            if (options.verbose)
-            {
-                printf("Tree size: %lld\n", encodeTree->treesize);
-                printf("Tree levels: %d\n", encodeTree->levels);
-                printQuadtree(encodeTree, 0, levels);
-            }
-            writeQuadtreeToQTC(options.outputFile, encodeTree, "Q1", width, height, levels, options.verbose);
-
-            free(pixmap);
-            free(encodeTree->Pixels);
-            free(encodeTree);
-        }
+        free(pixmap);
+        free(encodeTree->Pixels);
+        free(encodeTree);
+    
     }
 
     else if (options.decode)

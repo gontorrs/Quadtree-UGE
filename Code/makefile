@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-Wall -g -Iinclude
-SRCS=src/quad.c src/compress.c src/main.c
+SRCS=src/quad.c src/compress.c src/main.c src/filter.c
 OBJS=$(SRCS:.c=.o)
 
 all: codec
@@ -12,4 +12,4 @@ codec: $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f src/*.o codec *.qtc
+	rm -f src/*.o codec *.qtc *.pgm

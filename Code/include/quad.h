@@ -15,6 +15,7 @@ typedef struct Pixnode {
     unsigned char m;
     unsigned char e : 2;
     unsigned char u : 1;
+    double variance;
 } Pixnode;
 
 typedef struct Quadtree {
