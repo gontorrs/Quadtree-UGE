@@ -77,13 +77,13 @@ int encode(uchar* dest, uchar* src, WriteLog* log, int logSize) {
 
         // Determine the number of bits to write
         if (log[i].type == 'm') {
-            nbits = 8;  // m requires 8 bits
+            nbits = 8; 
         } else if (log[i].type == 'e') {
-            nbits = 2;  // e requires 2 bits
+            nbits = 2;  
         } else if (log[i].type == 'u') {
-            nbits = 1;  // u requires 1 bit
+            nbits = 1;  
         } else {
-            continue;  // Invalid type, skip
+            continue;  
         }
 
         // Push the bits into the bitstream

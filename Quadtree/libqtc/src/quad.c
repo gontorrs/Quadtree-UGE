@@ -5,7 +5,7 @@ double calculateCompressionRate(int originalSize, int compressedSize, bool verbo
 {
     if (originalSize == 0)
     {
-        return 0.0; // Avoid division by zero
+        return 0.0;
     }
     if(verbose){
         printf("Original Size: %d bits\n", originalSize);
@@ -20,7 +20,7 @@ int calculateTreeSize(int levels)
 {
     if (levels <= 0)
     {
-        return 0; // Si no hay niveles, no hay nodos
+        return 0;
     }
     return (pow(4, levels) - 1) / 3;
 }
@@ -211,6 +211,7 @@ void printQuadtree(Quadtree *tree, int nodeIndex, int level)
 
     // Print tabulation based on the level
     for (int i = 0; i < level; i++)
+
     {
         printf("   ");
     }
@@ -247,8 +248,8 @@ void get_current_datetime(char *buffer, size_t buffer_size)
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
     snprintf(buffer, buffer_size, "%d-%02d-%02d %02d:%02d:%02d",
-             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-             tm.tm_hour, tm.tm_min, tm.tm_sec);
+            tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+            tm.tm_hour, tm.tm_min, tm.tm_sec);
 }
 
 void packNodeData(Quadtree *tree, uchar *uncompressed, WriteLog *log, int *logSize, bool verbose)
