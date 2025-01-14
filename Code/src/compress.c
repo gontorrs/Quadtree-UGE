@@ -1,4 +1,3 @@
-#include "compress.h"
 #include "quad.h"
 uchar getbit(uchar byte, size_t b){
     return (byte >> b) & 1;

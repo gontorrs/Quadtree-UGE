@@ -1,15 +1,15 @@
 CC=gcc
 CFLAGS=-Wall -g -Iinclude
-SRCS=src/quad.c src/compress.c src/decode.c
+SRCS=src/quad.c src/compress.c src/main.c
 OBJS=$(SRCS:.c=.o)
 
-all: quadtree
+all: codec
 
-quadtree: $(OBJS)
-	$(CC) $(CFLAGS) -o quadtree $(OBJS) -lm
+codec: $(OBJS)
+	$(CC) $(CFLAGS) -o codec $(OBJS) -lm
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f src/*.o quadtree *.qtc
+	rm -f src/*.o codec *.qtc

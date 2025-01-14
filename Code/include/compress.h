@@ -5,8 +5,12 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include "quad.h"
-
+typedef struct WriteLog {
+    char type;
+    int index;
+} WriteLog;
 typedef unsigned char uchar;
 
 typedef struct { 

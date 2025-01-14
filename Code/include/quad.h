@@ -6,12 +6,10 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include "compress.h" 
 #define BASE_LAYER(tree) (((1 << (2 * ((tree)->levels - 1))) - 1) / 3)
 
-typedef struct WriteLog {
-    char type;
-    int index;
-} WriteLog;
+
 
 typedef struct Pixnode {
     unsigned char m;
@@ -25,13 +23,25 @@ typedef struct Quadtree {
     int levels;
 } Quadtree;
 
-typedef unsigned char uchar;
-
+// Declarations of Quadtree-related functions
 int calculateTreeSize(int);
-unsigned char* readPGM(const char*, int*, int*, int*);
+unsigned char* readPGM(const char*, int*, int*, int*, bool);
 Quadtree* initializeQuadtree(int levels);
-void encodePixmapToQuadtreeAscending(unsigned char*, int, Quadtree*);
-void packNodeData(Quadtree*, uchar*, WriteLog*, int*);
-void writeQuadtreeToQTC(const char*, Quadtree*, const char*, int, int, int);
+void encodePixmapToQuadtreeAscending(unsigned char* let, int num, Quadtree* tree);
+void packNodeData(Quadtree*, uchar*, WriteLog*, int*, bool verbose);
+void writeQuadtreeToQTC(const char*, Quadtree*, const char*, int, int, int, bool verbose);
+double calculateCompressionRate(int originalSize, int compressedSize, bool verbose);
+void createPixel(Pixnode *parent, Pixnode *tl, Pixnode *tr, Pixnode *br, Pixnode *bl);
+void pixmapToQuadtree(unsigned char *pixmap, int width, Quadtree *tree, int nodeIndex, int x, int y, int size, int level);
+void printQuadtree(Quadtree *tree, int nodeIndex, int level);
+void get_current_datetime(char *buffer, size_t buffer_size);
+long findLastPositionAfterNewline(FILE *file);
+int readLevels(FILE *file, Quadtree *tree);
+int allocateMemoryForQuadtree(Quadtree *tree);
+size_t readCompressedData(FILE *file, unsigned char *compressedData, size_t dataSize);
+void decodePixels(BitStream *stream, Quadtree *tree);
+void decodeQTCtoQuadtree(const char *filename, Quadtree *tree);
+void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, int x, int y, long long int nodeIndex, int level);
+void writePGMFile(const char *filename, int **pixelMatrix, int size);
 
 #endif

@@ -1,14 +1,16 @@
 #include "quad.h"
-#include "compress.h"
-#include "decode.h"
 
-double calculateCompressionRate(int originalSize, int compressedSize)
+double calculateCompressionRate(int originalSize, int compressedSize, bool verbose)
 {
     if (originalSize == 0)
     {
         return 0.0; // Avoid division by zero
     }
-    printf("Compression Rate %d / %d : %f\n", compressedSize / 8,  originalSize / 8, (double)compressedSize / originalSize * 100);
+    if(verbose){
+        printf("Original Size: %d bits\n", originalSize);
+        printf("Compressed Size: %d bits\n", compressedSize);
+        printf("Compression Rate: %d / %d = %.2f%%\n", compressedSize, originalSize, (double)compressedSize / originalSize * 100);
+    }
     return (double)compressedSize / originalSize * 100;
 }
 
@@ -23,7 +25,7 @@ int calculateTreeSize(int levels)
 }
 
 // Function to read a PGM file and return pixel data
-unsigned char *readPGM(const char *filename, int *width, int *height, int *maxGray)
+unsigned char *readPGM(const char *filename, int *width, int *height, int *maxGray, bool verbose)
 {
     FILE *file = fopen(filename, "rb");
     if (!file)
@@ -63,6 +65,9 @@ unsigned char *readPGM(const char *filename, int *width, int *height, int *maxGr
         fprintf(stderr, "Error: Failed to read width, height, or max gray value\n");
         fclose(file);
         return NULL;
+    }
+    if(verbose){
+        printf("Width: %d, Height: %d, Max Gray: %d\n", *width, *height, *maxGray);
     }
 
     // Read pixel data
@@ -166,20 +171,6 @@ void pixmapToQuadtree(unsigned char *pixmap, int width, Quadtree *tree, int node
     // Combine the four quadrants into the parent node
     createPixel(&tree->Pixels[nodeIndex], &tree->Pixels[tlIndex], &tree->Pixels[trIndex], &tree->Pixels[brIndex], &tree->Pixels[blIndex]);
 }
-
-// Wrapper function to encode the pixmap into the quadtree
-void encodePixmapToQuadtreeAscending(unsigned char *pixmap, int width, Quadtree *tree)
-{
-    if (!pixmap || !tree)
-    {
-        printf("Error: Invalid inputs to encodePixmapToQuadtree.\n");
-        return;
-    }
-
-    int size = width;                                        // Assuming square images (2^n x 2^n)
-    pixmapToQuadtree(pixmap, width, tree, 0, 0, 0, size, 0); // Start from the root node (level 0)
-}
-
 void printQuadtree(Quadtree *tree, int nodeIndex, int level)
 {
     Pixnode *node = &tree->Pixels[nodeIndex];
@@ -202,6 +193,19 @@ void printQuadtree(Quadtree *tree, int nodeIndex, int level)
         printQuadtree(tree, childIndex + 3, level + 1);
     }
 }
+// Wrapper function to encode the pixmap into the quadtree
+void encodePixmapToQuadtreeAscending(unsigned char *pixmap, int width, Quadtree *tree) {
+    if (!pixmap || !tree) {
+        printf("Error: Entradas inválidas a encodePixmapToQuadtreeAscending.\n");
+        return;
+    }
+
+    int size = width; // Asumimos imágenes cuadradas (2^n x 2^n)
+    pixmapToQuadtree(pixmap, width, tree, 0, 0, 0, size, 0);
+}
+
+
+
 
 // Function to get the current date and time in a string format
 void get_current_datetime(char *buffer, size_t buffer_size)
@@ -213,27 +217,34 @@ void get_current_datetime(char *buffer, size_t buffer_size)
              tm.tm_hour, tm.tm_min, tm.tm_sec);
 }
 
-void packNodeData(Quadtree *tree, uchar *uncompressed, WriteLog *log, int *logSize)
+void packNodeData(Quadtree *tree, uchar *uncompressed, WriteLog *log, int *logSize, bool verbose)
 {
     int bufferIndex = 0;
     int baseLayerStartIndex = BASE_LAYER(tree);
     int logIndex = 0;
 
+    // Local counters for m, e, and u writes
+    int mWrites = 0, eWrites = 0, uWrites = 0;
+
     // Write the root node
     uncompressed[bufferIndex] = tree->Pixels[0].m;
     log[logIndex++] = (WriteLog){'m', bufferIndex++};
+    mWrites++;
 
     uncompressed[bufferIndex] = tree->Pixels[0].e;
     log[logIndex++] = (WriteLog){'e', bufferIndex++};
+    eWrites++;
 
     if (tree->Pixels[0].e == 0)
     {
         uncompressed[bufferIndex] = tree->Pixels[0].u;
         log[logIndex++] = (WriteLog){'u', bufferIndex++};
+        uWrites++;
     }
 
-    // Skip writing child nodes if the root node has uniformity equals to 1
-    if (tree->Pixels[0].u == 1) {
+    // Skip writing children if the root node has uniformity equals to 1
+    if (tree->Pixels[0].u == 1)
+    {
         *logSize = logIndex;
         return;
     }
@@ -242,65 +253,61 @@ void packNodeData(Quadtree *tree, uchar *uncompressed, WriteLog *log, int *logSi
     {
         Pixnode *node = &tree->Pixels[i];
 
-        // Determine the parent index
-        int parentIndex = (i - 1) / 4;
+        // Skip the 4th node of each level
+        if (i % 4 == 0)
+        {
+            if (i < baseLayerStartIndex)
+            {
+                uncompressed[bufferIndex] = node->e;
+                log[logIndex++] = (WriteLog){'e', bufferIndex++};
+                eWrites++;
 
-        // Skip if parent node has uniformity equals to 1
-        if (tree->Pixels[parentIndex].u == 1) {
-            continue;
-        }
-
-        // Handle the base layer case
-        if (i >= baseLayerStartIndex) {
-            // Skip writing anything if it's the 4th child in the base layer
-            if (i % 4 == 0) {
-                continue;
-            }
-
-            // Otherwise, only write m
-            uncompressed[bufferIndex] = node->m;
-            log[logIndex++] = (WriteLog){'m', bufferIndex++};
-            continue;
-        }
-
-        // Handle the 4th child node case (non-base layer)
-        if (i % 4 == 0) {
-            uncompressed[bufferIndex] = node->e;
-            log[logIndex++] = (WriteLog){'e', bufferIndex++};
-
-            if (node->e == 0) {
                 uncompressed[bufferIndex] = node->u;
                 log[logIndex++] = (WriteLog){'u', bufferIndex++};
+                uWrites++;
             }
             continue;
         }
 
-        // Write the node's m value
+        // Skip if parent has uniformity equals to 1
+        int parentIndex = (i - 1) / 4;
+        if (tree->Pixels[parentIndex].u == 1)
+        {
+            continue;
+        }
+
+        // Write the node data
         uncompressed[bufferIndex] = node->m;
         log[logIndex++] = (WriteLog){'m', bufferIndex++};
+        mWrites++;
 
-        // Write the e value
+        // At the base layer, skip writing node->e and node->u
+        if (i >= baseLayerStartIndex)
+        {
+            continue;
+        }
+
         uncompressed[bufferIndex] = node->e;
         log[logIndex++] = (WriteLog){'e', bufferIndex++};
+        eWrites++;
 
-        // Only write u if e == 0
-        if (node->e == 0) {
+        if (node->e == 0)
+        {
             uncompressed[bufferIndex] = node->u;
             log[logIndex++] = (WriteLog){'u', bufferIndex++};
+            uWrites++;
         }
     }
 
     *logSize = logIndex;
+
+    if(verbose){
+        printf("mWrites: %d, eWrites: %d, uWrites: %d\n", mWrites, eWrites, uWrites);
+    }
 }
 
-
-
-
-
-
-
 // Function to write the quadtree to a .qtc file
-void writeQuadtreeToQTC(const char *filename, Quadtree *tree, const char *identification_code, int width, int height, int levels)
+void writeQuadtreeToQTC(const char *filename, Quadtree *tree, const char *identification_code, int width, int height, int levels, bool verbose)
 {
     FILE *file = fopen(filename, "wb");
     if (!file)
@@ -320,13 +327,13 @@ void writeQuadtreeToQTC(const char *filename, Quadtree *tree, const char *identi
     fwrite(datetime, sizeof(char), strlen(datetime), file);
 
     // Step 3: Prepare data for compression
-    WriteLog* log = malloc(tree->treesize * 3 * sizeof(WriteLog)); // m, e, u
-    uchar* uncompressed = malloc(tree->treesize * 3); // 3 bytes per node (m, e, u)
-    uchar* compressed = malloc(tree->treesize * 3);    // Worst case compression buffer
-    
+    WriteLog *log = malloc(tree->treesize * 3 * sizeof(WriteLog)); // m, e, u
+    uchar *uncompressed = malloc(tree->treesize * 3);              // 3 bytes per node (m, e, u)
+    uchar *compressed = malloc(tree->treesize);                    // Worst case compression buffer
+
     // Pack node data
     int logSize = 0;
-    packNodeData(tree, uncompressed, log, &logSize);
+    packNodeData(tree, uncompressed, log, &logSize, verbose);
 
     // Step 4: Compress data
     int compressedSize = encode(compressed, uncompressed, log, logSize);
@@ -335,7 +342,7 @@ void writeQuadtreeToQTC(const char *filename, Quadtree *tree, const char *identi
     // Calculate compression rate
     int originalSize = width * height * 8;
     int paddedCompressedSize = (compressedSize + 7) & ~7;
-    double compressionRate = calculateCompressionRate(originalSize, paddedCompressedSize);
+    double compressionRate = calculateCompressionRate(originalSize, paddedCompressedSize, verbose);
 
     char compressionRateStr[50];
     snprintf(compressionRateStr, sizeof(compressionRateStr), "# compression rate %.2f%%\n", compressionRate);
@@ -374,13 +381,13 @@ long findLastPositionAfterNewline(FILE *file) {
 int readLevels(FILE *file, Quadtree *tree) {
     unsigned char byte;
     if (fread(&byte, sizeof(unsigned char), 1, file) != 1) {
-        fprintf(stderr, "Error: No se encontró el número de niveles en el archivo.\n");
+        fprintf(stderr, "Error: Number of levels could not be found int the .qtc file.\n");
         return -1;
     }
 
     tree->levels = byte;
     if (tree->levels <= 0) {
-        fprintf(stderr, "Error: Número de niveles inválido (%d).\n", tree->levels);
+        fprintf(stderr, "Error: Number of levels not valid (%d).\n", tree->levels);
         return -1;
     }
 
@@ -393,14 +400,14 @@ int allocateMemoryForQuadtree(Quadtree *tree) {
 
     tree->Pixels = (Pixnode *)malloc(tree->treesize * sizeof(Pixnode));
     if (!tree->Pixels) {
-        perror("Error al asignar memoria para el Quadtree");
+        perror("Error when assigning memory for the quadtree pixels.");
         return -1;
     }
 
     size_t dataSize = tree->treesize * 3;
     unsigned char *compressedData = (unsigned char *)malloc(dataSize);
     if (!compressedData) {
-        perror("Error al asignar memoria para los datos comprimidos");
+        perror("Error when assigning memory for compressed data.");
         free(tree->Pixels);
         return -1;
     }
@@ -412,7 +419,7 @@ int allocateMemoryForQuadtree(Quadtree *tree) {
 size_t readCompressedData(FILE *file, unsigned char *compressedData, size_t dataSize) {
     size_t bytesRead = fread(compressedData, sizeof(unsigned char), dataSize, file);
     if (bytesRead == 0) {
-        fprintf(stderr, "Error: No se pudieron leer los datos comprimidos.\n");
+        fprintf(stderr, "Compressed data could not be read.\n");
     }
     return bytesRead;
 }
@@ -565,26 +572,23 @@ void decodeQTCtoQuadtree(const char *filename, Quadtree *tree) {
     free(compressedData);
 }
 
-
-
-
-// Función para llenar la matriz de píxeles desde el quadtree
+// Function to fill the pixel matrix from the quadtree.
 void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, int x, int y, long long int nodeIndex, int level) {
     if (nodeIndex < 0 || nodeIndex >= tree->treesize) {
-        fprintf(stderr, "Error: Índice del nodo (%lld) fuera de límites. Tamaño del árbol: %lld\n", nodeIndex, tree->treesize);
+        fprintf(stderr, "Error: Node index (%lld) out of bounds. Tree size: %lld\n", nodeIndex, tree->treesize);
         return;
     }
 
     Pixnode *node = &tree->Pixels[nodeIndex];
 
-    if (node->u == 1) { // Nodo uniforme
+    if (node->u == 1) { // Uniform node.
         int regionSize = size >> level;
         for (int i = 0; i < regionSize; i++) {
             for (int j = 0; j < regionSize; j++) {
                 pixelMatrix[x + i][y + j] = node->m;
             }
         }
-    } else { // Nodo interno
+    } else { // Inside node.
         int halfSize = size >> (level + 1);
 
         int tlIndex = 4 * nodeIndex + 1;
@@ -594,7 +598,7 @@ void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, in
 
         if (tlIndex >= tree->treesize || trIndex >= tree->treesize ||
             brIndex >= tree->treesize || blIndex >= tree->treesize) {
-            fprintf(stderr, "Error: Índice de hijo fuera de límites en fillPixelMatrixFromQuadtree.\n");
+            fprintf(stderr, "Error: Child index out of bounds in fillPixelMatrixFromQuadtree.\n");
             return;
         }
 
@@ -605,22 +609,22 @@ void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, in
     }
 }
 
-// Función para escribir el archivo .pgm
+// Function to write in the PGM file.
 void writePGMFile(const char *filename, int **pixelMatrix, int size)
 {
     FILE *file = fopen(filename, "w");
     if (!file)
     {
-        perror("Error when writing on .pgm file.");
+        perror("Error when writing on the pgm file.");
         return;
     }
 
-    // Escribir encabezado del archivo PGM
+    // Write the header of the pgm file.
     fprintf(file, "P2\n");
     fprintf(file, "%d %d\n", size, size);
     fprintf(file, "255\n");
 
-    // Escribir la matriz de píxeles
+    // Write the pixel matrix to the pgm file.
     for (int i = 0; i < size; i++)
     {
         for (int j = 0; j < size; j++)
@@ -631,64 +635,4 @@ void writePGMFile(const char *filename, int **pixelMatrix, int size)
     }
 
     fclose(file);
-}
-int main(int argc, char **argv)
-{
-    int width, height, maxGray;
-<<<<<<< HEAD
-    unsigned char* pixmap = readPGM("../PGM/passiflora.2048.pgm", &width, &height, &maxGray);
-    if (!pixmap) {
-=======
-    unsigned char *pixmap = readPGM("../PGM/TEST4x4.pgm", &width, &height, &maxGray);
-    if (!pixmap)
-    {
->>>>>>> 17af677 (decode works, missing translation and organise code)
-        return -1;
-    }
-
-    int levels = log2(width) + 1;
-
-    Quadtree *tree = initializeQuadtree(levels);
-    if (!tree)
-    {
-        free(pixmap);
-        return -1;
-    }
-
-    encodePixmapToQuadtreeAscending(pixmap, width, tree);
-<<<<<<< HEAD
-    writeQuadtreeToQTC("passiflora.2048.qtc", tree, "Q1", width, height, levels);
-
-
-=======
-    writeQuadtreeToQTC("TEST4x4.qtc", tree, "Q1", width, height, levels);
->>>>>>> 17af677 (decode works, missing translation and organise code)
-    free(pixmap);
-    free(tree->Pixels);
-    free(tree);
-
-    // Decode the .qtc file back to a PGM file.
-
-    const char *inputFilename = "../QTC.lossy/boat.512.a.qtc";
-    const char *outputFilename = "output.pgm";
-
-    Quadtree tree2;
-    decodeQTCtoQuadtree(inputFilename, &tree2);
-    int size = 1 << tree2.levels;
-    int **pixelMatrix = (int **)malloc(size * sizeof(int *));
-    for (int i = 0; i < size; i++)
-    {
-        pixelMatrix[i] = (int *)malloc(size * sizeof(int));
-        memset(pixelMatrix[i], 0, size * sizeof(int));
-    }
-    fillPixelMatrixFromQuadtree(&tree2, pixelMatrix, size, 0, 0, 0, 0);
-    writePGMFile(outputFilename, pixelMatrix, size);
-    for (int i = 0; i < size; i++)
-    {
-        free(pixelMatrix[i]);
-    }
-    free(pixelMatrix);
-    free(tree2.Pixels);
-
-    return 0;
 }
