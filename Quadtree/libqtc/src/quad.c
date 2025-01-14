@@ -460,7 +460,7 @@ size_t readCompressedData(FILE *file, unsigned char *compressedData, size_t data
 }
 
 void decodePixels(BitStream *stream, Quadtree *tree) {
-    for (long long i = 0; i < tree->treesize; i++) {
+    for (long long i = 0; i < tree->treesize; i++) { // Loop through all the nodes in the quadtree.
         Pixnode *current = &tree->Pixels[i];
         Pixnode *parent = NULL;
         if (i > 0) {
@@ -489,8 +489,8 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
             continue;
         }
 
-        if (parent->u == 1) { // Inherited state
-            current->m = parent->m;
+        if (parent->u == 1) { // If the parent is flagged as uniform, then the child inherits the parent's state (m).
+            current->m = parent->m; //If so, we don't read anything else.
             current->e = 0;
             current->u = 1;
             continue;
@@ -520,7 +520,7 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
                 current->u = 1;
             }
 
-            // Interpolate `m` for the first child
+            // Interpolate m for the first child with the math formula.
             int mParent = (int)parent->m;
             int eParent = (int)parent->e;
             int m1 = (int)tree->Pixels[i - 1].m;
@@ -536,7 +536,7 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
             }
 
             current->m = (unsigned char)mCalc;
-        } else { // Siblings
+        } else { // For the rest of the child nodes (siblings) we just read the the data.
             pullbits(stream, &current->m, 8);
 
             if (i < BASE_LAYER(tree)) {
@@ -566,7 +566,7 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
 }
 
 
-// Main function refactored to use smaller functions
+// Main decode function.
 void decodeQTCtoQuadtree(const char *filename, Quadtree *tree) {
     FILE *file = fopen(filename, "rb");
     if (!file) {
@@ -616,14 +616,14 @@ void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, in
 
     Pixnode *node = &tree->Pixels[nodeIndex];
 
-    if (node->u == 1) { // Uniform node.
+    if (node->u == 1) { // Uniform node, just copy the data.
         int regionSize = size >> level;
         for (int i = 0; i < regionSize; i++) {
             for (int j = 0; j < regionSize; j++) {
                 pixelMatrix[x + i][y + j] = node->m;
             }
         }
-    } else { // Inside node.
+    } else { // Not a uniform node, recurse into the children, and apply the same logic.
         int halfSize = size >> (level + 1);
 
         int tlIndex = 4 * nodeIndex + 1;
