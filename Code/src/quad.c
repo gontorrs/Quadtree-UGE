@@ -385,7 +385,7 @@ int readLevels(FILE *file, Quadtree *tree) {
         return -1;
     }
 
-    tree->levels = byte;
+    tree->levels = byte + 1; // I am not counting the root node as a level when reading from the .qtc file so I add 1.
     if (tree->levels <= 0) {
         fprintf(stderr, "Error: Number of levels not valid (%d).\n", tree->levels);
         return -1;
