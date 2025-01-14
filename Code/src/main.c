@@ -145,13 +145,16 @@ int main(int argc, char **argv)
         {
             printf("Tree size: %lld\n", encodeTree->treesize);
             printf("Tree levels: %d\n", encodeTree->levels);
-            printQuadtree(encodeTree, 0, levels);
+            
         }
         if (options.alpha != 0.0)
         {
             double sigma = calculateSigmaStart(encodeTree);
+            printf("Sigma: %.2f\n", sigma);
+            //printQuadtree(encodeTree, 0, 0);
             filtrage(encodeTree,0,0, sigma, options.alpha);
             printf("Encoding with the lossy version: alpha = %.1f\n", options.alpha);
+            //printQuadtree(encodeTree, 0, 0);
         }
         writeQuadtreeToQTC(options.outputFile, encodeTree, "Q1", width, height, levels, options.verbose);
 

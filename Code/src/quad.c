@@ -1,4 +1,5 @@
 #include "quad.h"
+#include "filter.h"
 
 double calculateCompressionRate(int originalSize, int compressedSize, bool verbose)
 {
@@ -143,33 +144,66 @@ void createPixel(Pixnode *parent, Pixnode *tl, Pixnode *tr, Pixnode *br, Pixnode
 }
 
 // Recursive function to build the quadtree in ascending order (suffix traversal)
-void pixmapToQuadtree(unsigned char *pixmap, int width, Quadtree *tree, int nodeIndex, int x, int y, int size, int level)
-{
-    // If we reach the smallest level (leaf nodes)
-    if (size == 1)
-    {
-        tree->Pixels[nodeIndex].m = pixmap[y * width + x];
-        tree->Pixels[nodeIndex].u = 1;
+void pixmapToQuadtree(unsigned char* pixmap, int width, Quadtree* tree, int nodeIndex, int x, int y, int size, int level){
+    if (size == 1) {
+        // Leaf node: store direct pixel
+        unsigned char pix = pixmap[y * width + x];
+        tree->Pixels[nodeIndex].m = pix;
+        tree->Pixels[nodeIndex].u = 1; 
         tree->Pixels[nodeIndex].e = 0;
+
+        // Compute variance from a single pixel 
+        // By definition, a single pixel is perfectly uniform => variance = 0
+        tree->Pixels[nodeIndex].variance = 0.0;
         return;
     }
 
     int halfSize = size / 2;
 
-    // Calculate indices for the 4 child blocks (clockwise order)
-    int tlIndex = 4 * nodeIndex + 1;
-    int trIndex = tlIndex + 1;
-    int brIndex = tlIndex + 2;
-    int blIndex = tlIndex + 3;
+    // Child indices in BFS order
+    int tlIndex = 4 * nodeIndex + 1;  
+    int trIndex = tlIndex + 1;        
+    int brIndex = tlIndex + 2;        
+    int blIndex = tlIndex + 3;        
 
-    // Recursively process the four quadrants (top-left, top-right, bottom-right, bottom-left)
-    pixmapToQuadtree(pixmap, width, tree, tlIndex, x, y, halfSize, level + 1);                       // Top-left
-    pixmapToQuadtree(pixmap, width, tree, trIndex, x + halfSize, y, halfSize, level + 1);            // Top-right
-    pixmapToQuadtree(pixmap, width, tree, brIndex, x + halfSize, y + halfSize, halfSize, level + 1); // Bottom-right
-    pixmapToQuadtree(pixmap, width, tree, blIndex, x, y + halfSize, halfSize, level + 1);            // Bottom-left
+    // Recurse down
+    pixmapToQuadtree(pixmap, width, tree, tlIndex, 
+                     x, y, halfSize, level + 1);            // Top-left
+    pixmapToQuadtree(pixmap, width, tree, trIndex, 
+                     x + halfSize, y, halfSize, level + 1);  // Top-right
+    pixmapToQuadtree(pixmap, width, tree, brIndex, 
+                     x + halfSize, y + halfSize, halfSize, level + 1);  // Bottom-right
+    pixmapToQuadtree(pixmap, width, tree, blIndex, 
+                     x, y + halfSize, halfSize, level + 1);  // Bottom-left
 
-    // Combine the four quadrants into the parent node
-    createPixel(&tree->Pixels[nodeIndex], &tree->Pixels[tlIndex], &tree->Pixels[trIndex], &tree->Pixels[brIndex], &tree->Pixels[blIndex]);
+    // Combine the four children into the parent
+    createPixel(&tree->Pixels[nodeIndex], 
+                &tree->Pixels[tlIndex], 
+                &tree->Pixels[trIndex],
+                &tree->Pixels[brIndex], 
+                &tree->Pixels[blIndex]);
+
+    // Now compute the parent's variance 
+    // using child means (m_k) and child variances (ν_k).
+    // We'll demonstrate that next:
+    double childMeans[4] = {
+        tree->Pixels[tlIndex].m,
+        tree->Pixels[trIndex].m,
+        tree->Pixels[brIndex].m,
+        tree->Pixels[blIndex].m
+    };
+    double childVars[4] = {
+        tree->Pixels[tlIndex].variance,
+        tree->Pixels[trIndex].variance,
+        tree->Pixels[brIndex].variance,
+        tree->Pixels[blIndex].variance
+    };
+
+    double parentMean = tree->Pixels[nodeIndex].m; // from createPixel()
+    
+    // Use the formula:  μ = Σ ( (ν_k)^2 + (m - m_k)^2 ),  then ν = sqrt(μ)/4
+    // Let’s call a helper function:
+    tree->Pixels[nodeIndex].variance = computeBlockVariance(parentMean, childMeans, childVars);
 }
 void printQuadtree(Quadtree *tree, int nodeIndex, int level)
 {

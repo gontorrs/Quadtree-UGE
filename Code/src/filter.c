@@ -69,7 +69,7 @@ double calculateSigmaStart(Quadtree* tree){
             maxVar = v;
         }
     }
-
+    printf("totalvar : %f tree size: %lld\n", totalVar,tree->treesize);
     double medvar = totalVar / (double)tree->treesize;
 
 
