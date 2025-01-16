@@ -521,10 +521,7 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
                 current->u = 1;
             }
 
-            // Interpolate m for the 4th child with the math formula.
-            // m4 = 4*mParent + e - (m1 + m2 + m3)
-            // where e is the raw remainder (0-3), NOT the signed conversion
-            // Interpolate m for the 4th child: m4 = 4*mP + eP - (m1+m2+m3)
+            // Interpolate m for the 4th child with the math formula -- m4 = 4*mParent + e - (m1 + m2 + m3)
             int mParent = (int)parent->m;
             int eParent = (int)parent->e; 
             
@@ -653,13 +650,12 @@ void writePGMFile(const char *filename, int **pixelMatrix, int size)
         return;
     }
 
-    // Write the header of the pgm file (ASCII format for header)
+    // Write the header of the pgm file.
     fprintf(file, "P5\n");
     fprintf(file, "%d %d\n", size, size);
     fprintf(file, "255\n");
 
-    // Write the pixel matrix to the pgm file in binary format
-    // Convert int to unsigned char and write row by row
+    // Write the pixel matrix to the pgm file.
     unsigned char *row = (unsigned char *)malloc(size * sizeof(unsigned char));
     if (!row)
     {
@@ -672,7 +668,7 @@ void writePGMFile(const char *filename, int **pixelMatrix, int size)
     {
         for (int j = 0; j < size; j++)
         {
-            // Clamp values to [0, 255]
+            // Unify values to [0, 255]
             int val = pixelMatrix[i][j];
             if (val < 0) val = 0;
             if (val > 255) val = 255;
