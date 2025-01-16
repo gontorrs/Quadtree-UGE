@@ -179,7 +179,7 @@ int main(int argc, char **argv)
             printQuadtree(decodeTree, 0, 0);
         }
 
-        int size = 1 << decodeTree->levels;
+        int size = 1 << (decodeTree->levels - 1);
         int **pixelMatrix = (int **)malloc(size * sizeof(int *));
         for (int i = 0; i < size; i++)
         {

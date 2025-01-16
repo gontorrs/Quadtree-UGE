@@ -36,7 +36,11 @@ unsigned char *readPGM(const char *filename, int *width, int *height, int *maxGr
     }
 
     char magicNumber[3];
-    fscanf(file, "%2s", magicNumber);
+    if (fscanf(file, "%2s", magicNumber) != 1) {
+        fprintf(stderr, "Error reading magic number\n");
+        fclose(file);
+        return NULL;
+    }
     if (strcmp(magicNumber, "P5") != 0)
     {
         fprintf(stderr, "Unsupported format: %s (only binary PGM supported)\n", magicNumber);
@@ -82,11 +86,15 @@ unsigned char *readPGM(const char *filename, int *width, int *height, int *maxGr
     }
 
     // Skip to the next line and any whitespace before pixel data
-    while ((c = fgetc(file)) == ' ' || c == '\t' || c == '\n')
-        ;
+    while ((c = fgetc(file)) == ' ' || c == '\t' || c == '\n');
     ungetc(c, file);
 
-    fread(data, 1, dataSize, file);
+    if (fread(data, 1, dataSize, file) != dataSize) {
+    fprintf(stderr, "Error reading pixel data: expected %zu bytes, got less\n", dataSize);
+    free(data);
+    fclose(file);
+    return NULL;
+    }
     fclose(file);
     return data;
 }
@@ -139,8 +147,9 @@ void createPixel(Pixnode *parent, Pixnode *tl, Pixnode *tr, Pixnode *br, Pixnode
     parent->m = (unsigned char)(sum / 4);
     parent->e = sum % 4;
 
-    // Check if all child nodes have the same pixel value
-    parent->u = ((tl->m == tr->m) && (tr->m == br->m) && (br->m == bl->m)) ? 1 : 0;
+    // A node is uniform ONLY if all children are uniform AND have the same value
+    parent->u = (tl->u && tr->u && br->u && bl->u && 
+                 (tl->m == tr->m) && (tr->m == br->m) && (br->m == bl->m)) ? 1 : 0;
 }
 
 // Recursive function to build the quadtree in ascending order (suffix traversal)
@@ -288,7 +297,14 @@ void packNodeData(Quadtree *tree, uchar *uncompressed, WriteLog *log, int *logSi
     {
         Pixnode *node = &tree->Pixels[i];
 
-        // Skip the 4th node of each level
+        // IMPORTANT: Check if parent is uniform FIRST to stay in sync with decoder
+        int parentIndex = (i - 1) / 4;
+        if (tree->Pixels[parentIndex].u == 1)
+        {
+            continue;
+        }
+
+        // Skip the 4th node of each level - don't write m (calculated during decode)
         if (i % 4 == 0)
         {
             if (i < baseLayerStartIndex)
@@ -297,17 +313,14 @@ void packNodeData(Quadtree *tree, uchar *uncompressed, WriteLog *log, int *logSi
                 log[logIndex++] = (WriteLog){'e', bufferIndex++};
                 eWrites++;
 
-                uncompressed[bufferIndex] = node->u;
-                log[logIndex++] = (WriteLog){'u', bufferIndex++};
-                uWrites++;
+                // Only write u if e == 0
+                if (node->e == 0)
+                {
+                    uncompressed[bufferIndex] = node->u;
+                    log[logIndex++] = (WriteLog){'u', bufferIndex++};
+                    uWrites++;
+                }
             }
-            continue;
-        }
-
-        // Skip if parent has uniformity equals to 1
-        int parentIndex = (i - 1) / 4;
-        if (tree->Pixels[parentIndex].u == 1)
-        {
             continue;
         }
 
@@ -471,15 +484,9 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
             pullbits(stream, &current->m, 8);
             unsigned char eRaw = 0;
             pullbits(stream, &eRaw, 2);
+            current->e = eRaw;
 
-            int e_signed = (int)eRaw;
-            if (e_signed > 1) {
-                e_signed -= 4;
-            }
-
-            current->e = (unsigned char)e_signed;
-
-            if (e_signed == 0) {
+            if (eRaw == 0) {
                 unsigned char uBit = 0;
                 pullbits(stream, &uBit, 1);
                 current->u = uBit;
@@ -496,19 +503,13 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
             continue;
         }
 
-        if (i % 4 == 0) { // First child of a node
+        if (i % 4 == 0) { // 4th child of a node (i = 4, 8, 12, ...)
             if (i < BASE_LAYER(tree)) {
                 unsigned char eRaw = 0;
                 pullbits(stream, &eRaw, 2);
+                current->e = eRaw;
 
-                int e_signed = (int)eRaw;
-                if (e_signed > 1) {
-                    e_signed -= 4;
-                }
-
-                current->e = (unsigned char)e_signed;
-
-                if (e_signed == 0) {
+                if (eRaw == 0) {
                     unsigned char uBit = 0;
                     pullbits(stream, &uBit, 1);
                     current->u = uBit;
@@ -520,13 +521,17 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
                 current->u = 1;
             }
 
-            // Interpolate m for the first child with the math formula.
+            // Interpolate m for the 4th child with the math formula.
+            // m4 = 4*mParent + e - (m1 + m2 + m3)
+            // where e is the raw remainder (0-3), NOT the signed conversion
+            // Interpolate m for the 4th child: m4 = 4*mP + eP - (m1+m2+m3)
             int mParent = (int)parent->m;
-            int eParent = (int)parent->e;
+            int eParent = (int)parent->e; 
+            
             int m1 = (int)tree->Pixels[i - 1].m;
             int m2 = (int)tree->Pixels[i - 2].m;
             int m3 = (int)tree->Pixels[i - 3].m;
-            int mCalc = 4 * (mParent + eParent) - (m1 + m2 + m3);
+            int mCalc = 4 * mParent + eParent - (m1 + m2 + m3);
 
             if (mCalc < 0) {
                 mCalc = 0;
@@ -542,15 +547,9 @@ void decodePixels(BitStream *stream, Quadtree *tree) {
             if (i < BASE_LAYER(tree)) {
                 unsigned char eRaw = 0;
                 pullbits(stream, &eRaw, 2);
+                current->e = eRaw;
 
-                int e_signed = (int)eRaw;
-                if (e_signed > 1) {
-                    e_signed -= 4;
-                }
-
-                current->e = (unsigned char)e_signed;
-
-                if (e_signed == 0) {
+                if (eRaw == 0) {
                     unsigned char uBit = 0;
                     pullbits(stream, &uBit, 1);
                     current->u = uBit;
@@ -620,7 +619,7 @@ void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, in
         int regionSize = size >> level;
         for (int i = 0; i < regionSize; i++) {
             for (int j = 0; j < regionSize; j++) {
-                pixelMatrix[x + i][y + j] = node->m;
+                pixelMatrix[y + i][x + j] = node->m;  // y is row, x is column
             }
         }
     } else { // Not a uniform node, recurse into the children, and apply the same logic.
@@ -637,37 +636,51 @@ void fillPixelMatrixFromQuadtree(Quadtree *tree, int **pixelMatrix, int size, in
             return;
         }
 
-        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x, y, tlIndex, level + 1);
-        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x, y + halfSize, trIndex, level + 1);
-        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x + halfSize, y + halfSize, brIndex, level + 1);
-        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x + halfSize, y, blIndex, level + 1);
+        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x, y, tlIndex, level + 1);                          // Top-left: (x, y)
+        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x + halfSize, y, trIndex, level + 1);              // Top-right: (x + halfSize, y)
+        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x + halfSize, y + halfSize, brIndex, level + 1);  // Bottom-right: (x + halfSize, y + halfSize)
+        fillPixelMatrixFromQuadtree(tree, pixelMatrix, size, x, y + halfSize, blIndex, level + 1);              // Bottom-left: (x, y + halfSize)
     }
 }
 
 // Function to write in the PGM file.
 void writePGMFile(const char *filename, int **pixelMatrix, int size)
 {
-    FILE *file = fopen(filename, "w");
+    FILE *file = fopen(filename, "wb");  // Binary mode
     if (!file)
     {
         perror("Error when writing on the pgm file.");
         return;
     }
 
-    // Write the header of the pgm file.
-    fprintf(file, "P2\n");
+    // Write the header of the pgm file (ASCII format for header)
+    fprintf(file, "P5\n");
     fprintf(file, "%d %d\n", size, size);
     fprintf(file, "255\n");
 
-    // Write the pixel matrix to the pgm file.
+    // Write the pixel matrix to the pgm file in binary format
+    // Convert int to unsigned char and write row by row
+    unsigned char *row = (unsigned char *)malloc(size * sizeof(unsigned char));
+    if (!row)
+    {
+        perror("Error allocating memory for row buffer");
+        fclose(file);
+        return;
+    }
+
     for (int i = 0; i < size; i++)
     {
         for (int j = 0; j < size; j++)
         {
-            fprintf(file, "%d ", pixelMatrix[i][j]);
+            // Clamp values to [0, 255]
+            int val = pixelMatrix[i][j];
+            if (val < 0) val = 0;
+            if (val > 255) val = 255;
+            row[j] = (unsigned char)val;
         }
-        fprintf(file, "\n");
+        fwrite(row, sizeof(unsigned char), size, file);
     }
 
+    free(row);
     fclose(file);
 }

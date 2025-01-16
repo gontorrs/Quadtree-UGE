@@ -8,7 +8,7 @@ TARGET    = codec
 SRCS      = main.c
 OBJS      = $(SRCS:.c=.o)
 
-all: $(TARGET)
+all: $(TARGET) libqtc.so
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -16,6 +16,8 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
-clean:
-	rm -f $(OBJS) $(TARGET) *.qtc
+libqtc.so: ../libqtc/libqtc.so
+	cp ../libqtc/libqtc.so .
 
+clean:
+	rm -f $(OBJS) $(TARGET) libqtc.so *.qtc
