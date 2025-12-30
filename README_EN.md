@@ -28,18 +28,26 @@ L'image est traitée comme une structure récursive :
 - The output is a custom `.qtc` format file.
 
 ## Usage
+This is a standard 512x512 image in .png (Github doesn't display .pgm) from the PGM folder in black and white:
+
+![Original Image](./results/original.png)
 
 ### Lossless Encoding
 ```sh
 ./codec -c -i ../../PGM/image.pgm -o output.qtc
 ```
+This is the image in .png (Github doesn't display .pgm) after the lossless coding:
+
+![Lossless Image](./results/lossless.png)
 
 ### Lossy Encoding
 ```sh
-./codec -c -i ../../PGM/image.pgm -o output.qtc -a 5.0
+./codec -c -i ../../PGM/image.pgm -o output.qtc -a 3.0
 ```
+This is the image in .png (Github doesn't display .pgm) after the lossy coding with alpha 3.0:  
 
-### Decoding (Decompression)
+![Lossy 3.0 Image](./results/lossy.png)
+### Decoding
 ```sh
 ./codec -u -i output.qtc -o reconstructed.pgm
 ```
